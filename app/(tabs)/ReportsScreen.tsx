@@ -1,6 +1,16 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, FlatList, StyleSheet, Button, Alert } from "react-native";
-import DateTimePicker from '@react-native-community/datetimepicker';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Alert,
+  Dimensions,
+} from "react-native";
+import DateTimePicker from "@react-native-community/datetimepicker";
+import { BarChart, PieChart } from "react-native-chart-kit";
+import { FontAwesome5, MaterialCommunityIcons, Feather } from "@expo/vector-icons";
 
 interface Venta {
   id: number;
@@ -11,23 +21,19 @@ interface Venta {
 interface DetalleVenta {
   detalle_id: number;
   articulo_nombre?: string;
-  nombre?: string; // Para pedidos personalizados
+  nombre?: string;
   cantidad: number;
   precio_unitario: number;
   venta_id?: number;
-  tipo?: string; // 'articulo' o 'personalizado'
+  tipo?: string;
+  esPersonalizado?: boolean;
 }
 
-interface Articulo {
-  id: number;
-  nombre: string;
-  precio: number;
-}
+const screenWidth = Dimensions.get("window").width - 32;
 
 export default function ReportsScreen() {
   const [ventas, setVentas] = useState<Venta[]>([]);
   const [detallesVentas, setDetallesVentas] = useState<DetalleVenta[]>([]);
-  const [productos, setProductos] = useState<Articulo[]>([]);
   const [fechaInicio, setFechaInicio] = useState<Date>(new Date());
   const [fechaFin, setFechaFin] = useState<Date>(new Date());
   const [showInicioPicker, setShowInicioPicker] = useState(false);
@@ -36,218 +42,270 @@ export default function ReportsScreen() {
 
   useEffect(() => {
     setDetallesVentas([]);
-
-    // Cargar ventas
     fetch("https://gyg-production.up.railway.app/ventas")
-      .then(res => res.json())
-      .then(data => {
+      .then((res) => res.json())
+      .then((data) => {
         const ventasData = Array.isArray(data) ? data : [];
         setVentas(ventasData);
 
         ventasData.forEach((venta: Venta) => {
-          // Cargar detalles con join a artículos y pedidos personalizados
           fetch(`https://gyg-production.up.railway.app/ventas/${venta.id}/detalle`)
-            .then(res => res.json())
-            .then(detalles => {
+            .then((res) => res.json())
+            .then((detalles) => {
               if (Array.isArray(detalles)) {
-                const detallesConVentaId = detalles.map((d: any) => {
-                  if (d.tipo === "personalizado") {
-                    return {
-                      detalle_id: d.detalle_id,
-                      venta_id: d.venta_id,
-                      cantidad: d.cantidad,
-                      precio_unitario: d.precio_unitario,
-                      tipo: "personalizado",
-                      nombre: d.nombre_personalizado ?? "Sin nombre",
-                      articulo_nombre: undefined,
-                    };
-                  } else {
-                    return {
-                      detalle_id: d.detalle_id,
-                      venta_id: d.venta_id,
-                      cantidad: d.cantidad,
-                      precio_unitario: d.precio_unitario,
-                      tipo: "articulo",
-                      articulo_nombre: d.articulo_nombre,
-                      nombre: undefined,
-                    };
-                  }
-                });
-                setDetallesVentas(prev => [...prev, ...detallesConVentaId]);
+                const detallesConVentaId = detalles.map((d: any) => ({
+                  detalle_id: d.detalle_id,
+                  venta_id: d.venta_id,
+                  cantidad: d.cantidad,
+                  precio_unitario: d.precio_unitario,
+                  tipo: d.tipo,
+                  nombre: d.nombre_personalizado ?? d.articulo_nombre ?? "Sin nombre",
+                  esPersonalizado: d.tipo === "personalizado",
+                }));
+                setDetallesVentas((prev) => [...prev, ...detallesConVentaId]);
               }
             })
-            .catch(err => {
-              console.error(err);
-              Alert.alert("Error", "No se pudieron cargar los detalles de ventas.");
-            });
+            .catch(() => Alert.alert("Error", "No se pudieron cargar los detalles."));
         });
       })
-      .catch(err => {
-        console.error(err);
-        Alert.alert("Error", "No se pudieron cargar las ventas.");
-      });
-
-    // Cargar productos
-    fetch("https://gyg-production.up.railway.app/api/articulos")
-      .then(res => res.json())
-      .then(data => setProductos(Array.isArray(data) ? data : []))
-      .catch(err => {
-        console.error(err);
-        Alert.alert("Error", "No se pudieron cargar los productos.");
-      });
+      .catch(() => Alert.alert("Error", "No se pudieron cargar las ventas."));
   }, [refreshFlag]);
 
-  // Filtrar ventas por fecha
-  const ventasFiltradas = ventas.filter(v => {
+  const ventasFiltradas = ventas.filter((v) => {
     const fechaVenta = new Date(v.fecha);
     return fechaVenta >= fechaInicio && fechaVenta <= fechaFin;
   });
 
-  const ventasFiltradasIds = ventasFiltradas.map(v => v.id);
+  const ventasFiltradasIds = ventasFiltradas.map((v) => v.id);
 
-  // Detalles filtrados y normalizados
   const detallesFiltrados = detallesVentas
-    .filter(d => d.venta_id && ventasFiltradasIds.includes(d.venta_id))
-    .map(d => ({
+    .filter((d) => d.venta_id && ventasFiltradasIds.includes(d.venta_id))
+    .map((d) => ({
       ...d,
-      displayNombre: d.tipo === "personalizado" ? d.nombre ?? "Sin nombre" : d.articulo_nombre,
-      displayCantidad: d.cantidad,
-      displayPrecio: d.precio_unitario,
       subtotal: d.cantidad * d.precio_unitario,
-      esPersonalizado: d.tipo === "personalizado"
     }));
 
-    const detallesPorVenta = ventasFiltradas.map(venta => {
-      const detalles = detallesFiltrados.filter(d => d.venta_id === venta.id);
-      const totalVenta = detalles.reduce((sum, d) => sum + d.subtotal, 0);
-      return { venta, detalles, totalVenta };
-    });
-    const totalesPorVenta: Record<number, number> = {};
-    detallesFiltrados.forEach(d => {
-      if (d.venta_id) {
-        if (!totalesPorVenta[d.venta_id]) totalesPorVenta[d.venta_id] = 0;
-        totalesPorVenta[d.venta_id] += d.subtotal;
-      }
-    });
-  // Productos más vendidos
-  const productosVendidos = detallesFiltrados
+  const detallesPorVenta = ventasFiltradas.map((venta) => {
+    const detalles = detallesFiltrados.filter((d) => d.venta_id === venta.id);
+    const totalVenta = detalles.reduce((sum, d) => sum + d.subtotal, 0);
+    return { venta, detalles, totalVenta };
+  });
+
+  const totalVendido = detallesFiltrados.reduce((sum, d) => sum + d.subtotal, 0);
+  const productosVendidos = detallesFiltrados.length;
+  const cantidadVentas = ventasFiltradas.length;
+
+  const productosMasVendidos = detallesFiltrados
     .reduce((acc: any[], item) => {
-      const idx = acc.findIndex(p => p.displayNombre === item.displayNombre);
-      if (idx >= 0) {
-        acc[idx].cantidadVendida += item.displayCantidad;
-      } else {
-        acc.push({
-          id: item.esPersonalizado ? `p-${item.detalle_id}` : item.detalle_id,
-          displayNombre: item.displayNombre,
-          cantidadVendida: item.displayCantidad,
-          esPersonalizado: item.esPersonalizado
-        });
-      }
+      const idx = acc.findIndex((p) => p.nombre === item.nombre);
+      if (idx >= 0) acc[idx].cantidadVendida += item.cantidad;
+      else acc.push({ nombre: item.nombre, cantidadVendida: item.cantidad, esPersonalizado: item.esPersonalizado });
       return acc;
     }, [])
     .sort((a, b) => b.cantidadVendida - a.cantidadVendida);
 
-  const handleManualRefresh = () => setRefreshFlag(f => f + 1);
+  const personalizados = detallesFiltrados.filter((d) => d.esPersonalizado).length;
+  const normales = detallesFiltrados.filter((d) => !d.esPersonalizado).length;
+
+  const barData = {
+    labels: productosMasVendidos.slice(0, 5).map((p) => p.nombre),
+    datasets: [
+      {
+        data: productosMasVendidos.slice(0, 5).map((p) => p.cantidadVendida),
+      },
+    ],
+  };
+
+  const pieData = [
+    {
+      name: "Artículos",
+      cantidad: normales,
+      color: "#a07d4b",
+      legendFontColor: "#3a2e1f",
+      legendFontSize: 13,
+    },
+    {
+      name: "Personalizados",
+      cantidad: personalizados,
+      color: "#d5b895",
+      legendFontColor: "#3a2e1f",
+      legendFontSize: 13,
+    },
+  ];
+
+  const handleManualRefresh = () => setRefreshFlag((f) => f + 1);
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Reportes de Ventas</Text>
-      <Button title="Actualizar" onPress={handleManualRefresh} />
+    <ScrollView style={styles.container} >
+      <Text style={styles.title}>📊 Reportes de Ventas</Text>
 
-      <View style={styles.datePickerContainer}>
-        <Button title="Seleccionar Fecha de Inicio" onPress={() => setShowInicioPicker(true)} />
-        {showInicioPicker && (
-          <DateTimePicker
-            value={fechaInicio}
-            mode="date"
-            display="default"
-            onChange={(event, date) => {
-              setShowInicioPicker(false);
-              if (date) setFechaInicio(date);
-            }}
-          />
-        )}
-        <Button title="Seleccionar Fecha de Fin" onPress={() => setShowFinPicker(true)} />
-        {showFinPicker && (
-          <DateTimePicker
-            value={fechaFin}
-            mode="date"
-            display="default"
-            onChange={(event, date) => {
-              setShowFinPicker(false);
-              if (date) setFechaFin(date);
-            }}
-          />
-        )}
+      {/* 🧾 Resumen general */}
+      <View style={styles.summaryContainer}>
+        <View style={[styles.summaryCard, { backgroundColor: "#a07d4b" }]}>
+          <View>
+            <Text style={styles.summaryLabel}>Total Vendido</Text>
+            <Text style={styles.summaryValue}>${totalVendido.toFixed(0)}</Text>
+          </View>
+        </View>
+
+        <View style={[styles.summaryCard, { backgroundColor: "#b08a5a" }]}>
+          <MaterialCommunityIcons name="receipt-text" size={22} color="#fff" />
+          <View>
+            <Text style={styles.summaryLabel}>Ventas</Text>
+            <Text style={styles.summaryValue}>{cantidadVentas}</Text>
+          </View>
+        </View>
+
+        <View style={[styles.summaryCard, { backgroundColor: "#d5b895" }]}>
+          <Feather name="box" size={22} color="#3a2e1f" />
+          <View>
+            <Text style={[styles.summaryLabel, { color: "#3a2e1f" }]}>Productos</Text>
+            <Text style={[styles.summaryValue, { color: "#3a2e1f" }]}>{productosVendidos}</Text>
+          </View>
+        </View>
       </View>
 
-      {/* Productos más vendidos */}
-      <Text style={styles.subtitle}>Productos Más Vendidos</Text>
-      <FlatList
-        data={productosVendidos}
-        keyExtractor={item => item.id.toString()}
-        ListEmptyComponent={<Text>No hay productos vendidos en este rango.</Text>}
-        renderItem={({ item }) => (
-          <View style={styles.item}>
-            <Text>{item.esPersonalizado ? "Personalizado" : "Artículo"}: {item.displayNombre}</Text>
-            <Text>Cantidad Vendida: {item.cantidadVendida}</Text>
-          </View>
-        )}
+      {/* 📅 Filtros y actualización */}
+      <View style={styles.card}>
+        <TouchableOpacity style={styles.button} onPress={handleManualRefresh}>
+          <Text style={styles.buttonText}>🔄 Actualizar Datos</Text>
+        </TouchableOpacity>
+
+        <View style={styles.dateRow}>
+          <TouchableOpacity style={styles.dateButton} onPress={() => setShowInicioPicker(true)}>
+            <Text style={styles.dateButtonText}>Desde: {fechaInicio.toLocaleDateString()}</Text>
+          </TouchableOpacity>
+          {showInicioPicker && (
+            <DateTimePicker
+              value={fechaInicio}
+              mode="date"
+              display="default"
+              onChange={(e, date) => {
+                setShowInicioPicker(false);
+                if (date) setFechaInicio(date);
+              }}
+            />
+          )}
+
+          <TouchableOpacity style={styles.dateButton} onPress={() => setShowFinPicker(true)}>
+            <Text style={styles.dateButtonText}>Hasta: {fechaFin.toLocaleDateString()}</Text>
+          </TouchableOpacity>
+          {showFinPicker && (
+            <DateTimePicker
+              value={fechaFin}
+              mode="date"
+              display="default"
+              onChange={(e, date) => {
+                setShowFinPicker(false);
+                if (date) setFechaFin(date);
+              }}
+            />
+          )}
+        </View>
+      </View>
+
+      {/* 🏆 Productos más vendidos */}
+      <Text style={styles.subtitle}>🏆 Productos más vendidos</Text>
+      {productosMasVendidos.length > 0 ? (
+        <BarChart
+          data={barData}
+          width={screenWidth}
+          height={220}
+          yAxisLabel=""
+          yAxisSuffix=""
+          chartConfig={{
+            backgroundColor: "#f9f4ef",
+            backgroundGradientFrom: "#f9f4ef",
+            backgroundGradientTo: "#f9f4ef",
+            decimalPlaces: 0,
+            color: () => "#a07d4b",
+            labelColor: () => "#3a2e1f",
+          }}
+          style={styles.chart}
+        />
+      ) : (
+        <Text style={styles.emptyText}>No hay productos vendidos en este rango.</Text>
+      )}
+
+      {/* 🥧 Tipos de venta */}
+      <Text style={styles.subtitle}>📊 Tipos de venta</Text>
+      <PieChart
+        data={pieData}
+        width={screenWidth}
+        height={200}
+        chartConfig={{
+          color: () => "#3a2e1f",
+        }}
+        accessor="cantidad"
+        backgroundColor="transparent"
+        paddingLeft="10"
       />
 
-      {/* Detalles de ventas */}
-      <Text style={styles.subtitle}>Detalles de Ventas</Text>
-      <FlatList
-        data={detallesPorVenta}
-        keyExtractor={(item) => item.venta.id.toString()}
-        ListEmptyComponent={<Text>No hay detalles de ventas en este rango.</Text>}
-        renderItem={({ item }) => (
-          <View style={{ marginBottom: 16 }}>
-            <Text style={{ fontWeight: "bold", fontSize: 16 }}>
-              Venta: {item.venta.id} - Fecha: {new Date(item.venta.fecha).toLocaleString()}
+      {/* 📋 Detalles */}
+      <Text style={styles.subtitle}>🧾 Detalles por venta</Text>
+      {detallesPorVenta.length === 0 ? (
+        <Text style={styles.emptyText}>No hay detalles en este rango.</Text>
+      ) : (
+        detallesPorVenta.map((item) => (
+          <View key={item.venta.id} style={styles.saleCard}>
+            <Text style={styles.saleHeader}>
+              Venta #{item.venta.id} — {new Date(item.venta.fecha).toLocaleDateString()}
             </Text>
-            {item.detalles.map(d => (
-              <View key={d.detalle_id} style={styles.item}>
-                <Text>{d.esPersonalizado ? `Personalizado: ${d.displayNombre}` : `Producto: ${d.displayNombre}`}</Text>
-                <Text>Cantidad: {d.displayCantidad}</Text>
-                <Text>Precio unitario: ${d.displayPrecio}</Text>
-                <Text>Subtotal: ${d.subtotal}</Text>
+            {item.detalles.map((d) => (
+              <View key={d.detalle_id} style={styles.saleItem}>
+                <Text style={styles.saleText}>
+                  {d.esPersonalizado ? "✨ Personalizado" : "🪵 Artículo"}: {d.nombre}
+                </Text>
+                <Text style={styles.saleText}>Cantidad: {d.cantidad}</Text>
+                <Text style={styles.saleText}>Precio: ${d.precio_unitario}</Text>
+                <Text style={styles.saleSubtotal}>Subtotal: ${d.subtotal}</Text>
               </View>
             ))}
-            <Text style={{ fontWeight: "bold", fontSize: 16 }}>Total venta: ${item.totalVenta}</Text>
+            <Text style={styles.totalVenta}>💰 Total: ${item.totalVenta}</Text>
           </View>
-        )}
-      />
-    </View>
+        ))
+      )}
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  container: { flex: 1, backgroundColor: "#f9f4ef", padding: 16,marginBottom: 84 },
+  title: { fontSize: 26, marginTop: 16, fontWeight: "bold", textAlign: "center", color: "#3a2e1f", marginBottom: 16 },
+  summaryContainer: { flexDirection: "row", justifyContent: "space-between", marginBottom: 20 },
+  summaryCard: {
     flex: 1,
-    padding: 16,
-    backgroundColor: '#fff',
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 16,
-  },
-  datePickerContainer: {
-    marginBottom: 16,
-  },
-  subtitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginVertical: 8,
-  },
-  item: {
+    borderRadius: 12,
     padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#ccc',
-    borderRadius: 4,
-    marginBottom: 4,
-    backgroundColor: '#f9f9f9'
+    marginHorizontal: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
+  summaryLabel: { color: "#fff", fontSize: 13 },
+  summaryValue: { color: "#fff", fontSize: 18, fontWeight: "bold" },
+  card: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  button: { backgroundColor: "#a07d4b", borderRadius: 8, paddingVertical: 10, alignItems: "center", marginBottom: 10 },
+  buttonText: { color: "#fff", fontWeight: "bold" },
+  dateRow: { flexDirection: "row", justifyContent: "space-between" },
+  dateButton: { backgroundColor: "#e9dcc3", paddingVertical: 8, paddingHorizontal: 10, borderRadius: 8 },
+  dateButtonText: { color: "#3a2e1f", fontWeight: "500" },
+  subtitle: { fontSize: 20, fontWeight: "bold", marginVertical: 10, color: "#3a2e1f" },
+  chart: { borderRadius: 10, marginBottom: 20 },
+  saleCard: { backgroundColor: "#fff", borderRadius: 12, padding: 14, marginBottom: 16, elevation: 3 },
+  saleHeader: { fontWeight: "bold", color: "#a07d4b", fontSize: 16, marginBottom: 8 },
+  saleItem: { backgroundColor: "#f4ede4", padding: 10, borderRadius: 8, marginBottom: 8 },
+  saleText: { color: "#3a2e1f" },
+  saleSubtotal: { color: "#000", fontWeight: "bold" },
+  totalVenta: { textAlign: "right", fontWeight: "bold", color: "#3a2e1f", fontSize: 16 },
+  emptyText: { textAlign: "center", color: "#777", marginVertical: 8 },
 });
-            

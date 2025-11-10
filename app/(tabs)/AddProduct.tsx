@@ -1,8 +1,17 @@
 import React, { useState, useEffect } from "react";
-import { View, Text, TextInput, Button, StyleSheet, Image, ScrollView } from "react-native";
+import {
+  View,
+  Text,
+  TextInput,
+  StyleSheet,
+  Image,
+  ScrollView,
+  TouchableOpacity,
+  Switch,
+} from "react-native";
 import { Picker } from "@react-native-picker/picker";
-import * as ImagePicker from 'expo-image-picker';
-import { useNavigation } from '@react-navigation/native';
+import * as ImagePicker from "expo-image-picker";
+import { useNavigation } from "@react-navigation/native";
 
 interface Categoria {
   id: number;
@@ -16,8 +25,8 @@ export default function AddProductScreen() {
   const [precio, setPrecio] = useState("");
   const [stock, setStock] = useState("");
   const [medidas, setMedidas] = useState("");
-  const [enOferta, setEnOferta] = useState("");
-  const [destacado, setDestacado] = useState("");
+  const [enOferta, setEnOferta] = useState(false);
+  const [destacado, setDestacado] = useState(false);
   const [categoriaId, setCategoriaId] = useState<number | undefined>(undefined);
   const [imagenes, setImagenes] = useState<string[]>([]);
   const navigation = useNavigation();
@@ -25,9 +34,7 @@ export default function AddProductScreen() {
   useEffect(() => {
     fetch("https://gyg-production.up.railway.app/api/categorias")
       .then((response) => response.json())
-      .then((data) => {
-        setCategorias(data);
-      })
+      .then((data) => setCategorias(data))
       .catch((error) => console.error(error));
   }, []);
 
@@ -38,8 +45,8 @@ export default function AddProductScreen() {
       precio: parseFloat(precio) || 0,
       stock: parseInt(stock) || 0,
       medidas,
-      en_oferta: parseInt(enOferta) || 0,
-      destacado: parseInt(destacado) || 0,
+      en_oferta: enOferta ? 1 : 0,
+      destacado: destacado ? 1 : 0,
       categoria_id: categoriaId,
       imagenes,
     };
@@ -50,9 +57,7 @@ export default function AddProductScreen() {
       body: JSON.stringify(articulo),
     })
       .then((response) => response.json())
-      .then((newArticulo) => {
-        navigation.goBack();
-      })
+      .then(() => navigation.goBack())
       .catch((error) => console.error(error));
   };
 
@@ -67,7 +72,6 @@ export default function AddProductScreen() {
     if (!result.canceled && result.assets.length > 0) {
       const imageUri = result.assets[0].uri;
 
-      // Crear FormData para la imagen
       const formData = new FormData();
       formData.append("file", {
         uri: imageUri,
@@ -82,19 +86,14 @@ export default function AddProductScreen() {
           {
             method: "POST",
             body: formData,
-            headers: {
-              "Content-Type": "multipart/form-data",
-            },
+            headers: { "Content-Type": "multipart/form-data" },
           }
         );
 
-        if (!response.ok) {
-          throw new Error("Error en la subida de la imagen");
-        }
+        if (!response.ok) throw new Error("Error al subir la imagen");
 
         const data = await response.json();
-        console.log("Imagen subida con éxito:", data.secure_url);
-        setImagenes((prev) => [...prev, data.secure_url]); // Guardar URL segura en el estado
+        setImagenes((prev) => [...prev, data.secure_url]);
       } catch (error) {
         console.error("Error al subir la imagen:", error);
       }
@@ -105,21 +104,22 @@ export default function AddProductScreen() {
     <ScrollView contentContainerStyle={styles.scrollContainer}>
       <View style={styles.container}>
         <Text style={styles.title}>Agregar Producto</Text>
-        <Text>Nombre</Text>
+
         <TextInput
           style={styles.input}
           placeholder="Nombre"
           value={nombre}
           onChangeText={setNombre}
         />
-        <Text>Descripción</Text>
+
         <TextInput
-          style={styles.input}
+          style={[styles.input, styles.textArea]}
           placeholder="Descripción"
           value={descripcion}
           onChangeText={setDescripcion}
+          multiline
         />
-        <Text>Precio</Text>
+
         <TextInput
           style={styles.input}
           placeholder="Precio"
@@ -127,7 +127,7 @@ export default function AddProductScreen() {
           onChangeText={setPrecio}
           keyboardType="numeric"
         />
-        <Text>Stock</Text>
+
         <TextInput
           style={styles.input}
           placeholder="Stock"
@@ -135,48 +135,61 @@ export default function AddProductScreen() {
           onChangeText={setStock}
           keyboardType="numeric"
         />
-        <Text>Medidas</Text>
+
         <TextInput
           style={styles.input}
           placeholder="Medidas"
           value={medidas}
           onChangeText={setMedidas}
         />
-        <Text>En Oferta</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="En Oferta"
-          value={enOferta}
-          onChangeText={setEnOferta}
-          keyboardType="numeric"
-        />
-        <Text>Destacado</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Destacado"
-          value={destacado}
-          onChangeText={setDestacado}
-          keyboardType="numeric"
-        />
-        <Text>Categoría</Text>
+
+        {/* SWITCHES */}
+        <View style={styles.switchContainer}>
+          <Text style={styles.switchLabel}>En oferta</Text>
+          <Switch
+            value={enOferta}
+            onValueChange={setEnOferta}
+            trackColor={{ false: "#ccc", true: "#d3b17d" }}
+            thumbColor={enOferta ? "#a07d4b" : "#f4f3f4"}
+          />
+        </View>
+
+        <View style={styles.switchContainer}>
+          <Text style={styles.switchLabel}>Destacado</Text>
+          <Switch
+            value={destacado}
+            onValueChange={setDestacado}
+            trackColor={{ false: "#ccc", true: "#d3b17d" }}
+            thumbColor={destacado ? "#a07d4b" : "#f4f3f4"}
+          />
+        </View>
+
         <View style={styles.pickerContainer}>
           <Picker
             selectedValue={categoriaId}
             style={styles.picker}
             onValueChange={(itemValue: number) => setCategoriaId(itemValue)}
           >
+            <Picker.Item label="Seleccionar categoría..." value={undefined} />
             {categorias.map((cat: Categoria) => (
               <Picker.Item key={cat.id} label={cat.nombre} value={cat.id} />
             ))}
           </Picker>
         </View>
-        <Button title="Seleccionar Imagen" onPress={pickImage} color="#a07d4b" />
+
+        <TouchableOpacity style={styles.imageButton} onPress={pickImage}>
+          <Text style={styles.imageButtonText}>📸 Seleccionar Imagen</Text>
+        </TouchableOpacity>
+
         <View style={styles.imageContainer}>
           {imagenes.map((uri, index) => (
             <Image key={index} source={{ uri }} style={styles.image} />
           ))}
         </View>
-        <Button title="Agregar" onPress={handleAddProduct} color="#a07d4b" />
+
+        <TouchableOpacity style={styles.submitButton} onPress={handleAddProduct}>
+          <Text style={styles.submitText}>Agregar Producto</Text>
+        </TouchableOpacity>
       </View>
     </ScrollView>
   );
@@ -185,42 +198,103 @@ export default function AddProductScreen() {
 const styles = StyleSheet.create({
   scrollContainer: {
     flexGrow: 1,
+    backgroundColor: "#F8F4EE",
+    paddingVertical: 24,
   },
   container: {
     flex: 1,
-    padding: 16,
-    backgroundColor: '#fff',
+    padding: 20,
   },
   title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 16,
+    fontSize: 26,
+    fontWeight: "bold",
+    color: "#5a3e1b",
+    textAlign: "center",
+    marginBottom: 25,
   },
   input: {
-    height: 40,
-    borderColor: 'gray',
+    backgroundColor: "#fff",
     borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     marginBottom: 12,
-    paddingHorizontal: 8,
+    fontSize: 16,
+  },
+  textArea: {
+    height: 80,
+    textAlignVertical: "top",
+  },
+  switchContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#fff",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    marginBottom: 12,
+  },
+  switchLabel: {
+    fontSize: 16,
+    color: "#333",
   },
   pickerContainer: {
-    borderColor: 'gray',
+    backgroundColor: "#fff",
+    borderRadius: 10,
     borderWidth: 1,
-    marginBottom: 12,
+    borderColor: "#ddd",
+    marginBottom: 15,
+    overflow: "hidden",
   },
   picker: {
-    height: 40,
-    width: '100%',
+    height: 50,
+  },
+  imageButton: {
+    backgroundColor: "#d3b17d",
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: "center",
+    marginBottom: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+  },
+  imageButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
   },
   imageContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginVertical: 16,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginBottom: 16,
   },
   image: {
     width: 100,
     height: 100,
     marginRight: 8,
     marginBottom: 8,
+    borderRadius: 8,
+  },
+  submitButton: {
+    backgroundColor: "#a07d4b",
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: "center",
+    marginTop: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+  },
+  submitText: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "600",
   },
 });

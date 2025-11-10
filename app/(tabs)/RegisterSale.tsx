@@ -8,11 +8,12 @@ import {
   ScrollView,
   StyleSheet,
   ActivityIndicator,
-  Pressable
+  Pressable,
 } from "react-native";
 import { Picker } from "@react-native-picker/picker";
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute } from "@react-navigation/native";
 import { useColorScheme } from "@/hooks/useColorScheme";
+import { Ionicons } from "@expo/vector-icons";
 
 interface Articulo {
   id: number;
@@ -36,7 +37,7 @@ interface ProductoVenta {
   nombre?: string;
   descripcion?: string;
   cantidad: number;
-  medidas?: string;  
+  medidas?: string;
   precio_unitario: number;
 }
 
@@ -48,24 +49,28 @@ interface CustomProduct {
   precio: number;
 }
 
-type ProductoSeleccionado = (Articulo & { tipo: "articulo" }) | (CustomProduct & { tipo: "personalizado" }) | null;
+type ProductoSeleccionado =
+  | (Articulo & { tipo: "articulo" })
+  | (CustomProduct & { tipo: "personalizado" })
+  | null;
 
 export default function RegisterSaleScreen() {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === "dark";
   const colors = {
-    background: isDark ? "#0b1220" : "#f4f6fb",
-    card: isDark ? "#0f1724" : "#ffffff",
-    text: isDark ? "#e6eef8" : "#111827",
-    muted: isDark ? "#9aa4b2" : "#6b7280",
-    accent: "#0f4c81",
-    danger: "#b91c1c"
-  };
+  background: "#f9f4ef", // crema cálido
+  card: "#ffffff",
+  text: "#3a2e1f", // marrón oscuro madera
+  muted: "#8b7355",
+  accent: "#a07d4b", // dorado madera
+  accentLight: "#c19a6b",
+  danger: "#b91c1c",
+  border: "#e9dcc3",
+};
 
   const [productos, setProductos] = useState<Articulo[]>([]);
   const [customProducts, setCustomProducts] = useState<CustomProduct[]>([]);
   const [tipoProducto, setTipoProducto] = useState<TipoProducto>("articulo");
-  const [selectedProducto, setSelectedProducto] = useState<ProductoSeleccionado>(null);
+  const [selectedProducto, setSelectedProducto] =
+    useState<ProductoSeleccionado>(null);
   const [cantidad, setCantidad] = useState("");
   const [productosVenta, setProductosVenta] = useState<ProductoVenta[]>([]);
   const [loading, setLoading] = useState(false);
@@ -74,200 +79,179 @@ export default function RegisterSaleScreen() {
   const { item } = (route.params as { item?: Articulo }) || {};
 
   const fetchProductos = () => {
-    // Artículos con stock > 0
     fetch("https://gyg-production.up.railway.app/api/articulos")
-      .then((response) => response.json())
+      .then((r) => r.json())
       .then((data) => {
-        const disponibles = Array.isArray(data) ? data.filter(p => p.stock > 0) : [];
+        const disponibles = Array.isArray(data)
+          ? data.filter((p) => p.stock > 0)
+          : [];
         setProductos(disponibles);
-        if (item) {
-          setSelectedProducto({ ...item, tipo: "articulo" });
-        }
+        if (item) setSelectedProducto({ ...item, tipo: "articulo" });
       })
-      .catch((error) => {
-        console.error(error);
-        setProductos([]);
-      });
+      .catch(() => setProductos([]));
 
-    // Personalizados disponibles
     fetch("https://gyg-production.up.railway.app/pedidos_personalizados/disponibles")
-      .then((response) => response.json())
+      .then((r) => r.json())
       .then((data) => setCustomProducts(Array.isArray(data) ? data : []))
-      .catch((error) => {
-        console.error(error);
-        setCustomProducts([]);
-      });
+      .catch(() => setCustomProducts([]));
   };
 
   useEffect(() => {
     fetchProductos();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item]);
 
   const cantidadVenta = parseInt(cantidad, 10) || 0;
   const cantidadValidaArticulo =
     tipoProducto === "articulo" &&
-    selectedProducto &&
-    selectedProducto.tipo === "articulo" &&
-    !isNaN(cantidadVenta) &&
+    selectedProducto?.tipo === "articulo" &&
     cantidadVenta > 0 &&
     cantidadVenta <= selectedProducto.stock;
 
   const cantidadValidaCustom =
     tipoProducto === "personalizado" &&
-    selectedProducto &&
-    selectedProducto.tipo === "personalizado" &&
-    cantidad === "1"; // Solo uno para personalizados
+    selectedProducto?.tipo === "personalizado" &&
+    cantidad === "1";
 
-  const personalizadoValido = cantidadValidaCustom;
-
-  const puedeAgregar =
-    (tipoProducto === "articulo" && cantidadValidaArticulo) ||
-    (tipoProducto === "personalizado" && personalizadoValido);
+  const puedeAgregar = cantidadValidaArticulo || cantidadValidaCustom;
 
   const handleAgregarProducto = () => {
-    if (tipoProducto === "articulo") {
-      if (!selectedProducto || selectedProducto.tipo !== "articulo") {
-        Alert.alert("Error", "Debe seleccionar un producto.");
-        return;
-      }
-      if (!cantidadValidaArticulo) {
-        Alert.alert("Error", "Cantidad inválida o supera el stock.");
-        return;
-      }
-      setProductosVenta(prev => [
+    if (!selectedProducto) {
+      Alert.alert("Error", "Debe seleccionar un producto válido.");
+      return;
+    }
+
+    if (tipoProducto === "articulo" && cantidadValidaArticulo) {
+      setProductosVenta((prev) => [
         ...prev,
         {
           tipo: "articulo",
           articulo_id: selectedProducto.id,
           cantidad: cantidadVenta,
           precio_unitario: selectedProducto.precio,
-        }
+        },
       ]);
-      // Actualizar stock localmente
-      setProductos(prev =>
-        prev.map(p =>
+      setProductos((prev) =>
+        prev.map((p) =>
           p.id === selectedProducto.id
             ? { ...p, stock: p.stock - cantidadVenta }
             : p
         )
       );
-      setCantidad("");
-      setSelectedProducto(null);
-      Keyboard.dismiss();
-    } else {
-      if (!personalizadoValido || !selectedProducto || selectedProducto.tipo !== "personalizado") {
-        Alert.alert("Error", "Seleccione un personalizado y cantidad válida.");
-        return;
-      }
-      setProductosVenta(prev => [
+    } else if (tipoProducto === "personalizado" && cantidadValidaCustom) {
+      setProductosVenta((prev) => [
         ...prev,
         {
           tipo: "personalizado",
           personalizado_id: selectedProducto.id,
           nombre: selectedProducto.nombre,
           descripcion: selectedProducto.descripcion,
-          cantidad: cantidadVenta || 1,
-          precio_unitario: selectedProducto.precio ?? 0,
-        }
+          cantidad: 1,
+          precio_unitario: selectedProducto.precio,
+        },
       ]);
-      setSelectedProducto(null);
-      setCantidad("");
-      Keyboard.dismiss();
+    } else {
+      Alert.alert("Error", "Cantidad inválida.");
+      return;
     }
+
+    setCantidad("");
+    setSelectedProducto(null);
+    Keyboard.dismiss();
   };
 
   const handleEliminarProductoVenta = (idx: number) => {
     const prod = productosVenta[idx];
     if (prod.tipo === "articulo" && prod.articulo_id) {
-      setProductos(prev =>
-        prev.map(p =>
+      setProductos((prev) =>
+        prev.map((p) =>
           p.id === prod.articulo_id
             ? { ...p, stock: p.stock + prod.cantidad }
             : p
         )
       );
     }
-    setProductosVenta(prev => prev.filter((_, i) => i !== idx));
+    setProductosVenta((prev) => prev.filter((_, i) => i !== idx));
   };
 
   const handleRegisterSale = () => {
     if (productosVenta.length === 0) {
-      Alert.alert("Error", "Agregue al menos un producto a la venta.");
+      Alert.alert("Error", "Agregue al menos un producto.");
       return;
     }
     setLoading(true);
 
-    const venta = {
-      articulos: productosVenta
-    };
-
     fetch("https://gyg-production.up.railway.app/ventas", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(venta),
+      body: JSON.stringify({ articulos: productosVenta }),
     })
-      .then(async (response) => {
-        if (!response.ok) {
-          const text = await response.text().catch(() => "");
-          let errorMsg = text;
-          try {
-            const json = JSON.parse(text || "{}");
-            errorMsg = json.error || JSON.stringify(json);
-          } catch {}
-          console.error("Error backend:", errorMsg);
-          throw new Error(errorMsg || "Error al registrar la venta");
-        }
-        return response.json();
+      .then((r) => {
+        if (!r.ok) throw new Error("Error al registrar la venta");
+        return r.json();
       })
-      .then((data) => {
-        Alert.alert(
-          "Venta registrada",
-          "La venta se registró correctamente.",
-          [
-            {
-              text: "OK",
-              onPress: () => {
-                setProductosVenta([]);
-                setCantidad("");
-                setSelectedProducto(null);
-                fetchProductos();
-                Keyboard.dismiss();
-                // Volver si es posible
-                try {
-                  // @ts-ignore
-                  navigation.goBack?.();
-                } catch {}
-              }
-            }
-          ]
-        );
+      .then(() => {
+        Alert.alert("Éxito", "Venta registrada correctamente.", [
+          { text: "OK", onPress: () => navigation.goBack() },
+        ]);
+        setProductosVenta([]);
       })
-      .catch((error) => {
-        console.error("Error fetch:", error);
-        Alert.alert("Error", error.message || "Error al registrar la venta.");
-      })
+      .catch((err) => Alert.alert("Error", err.message))
       .finally(() => setLoading(false));
   };
 
-  const totalVenta = productosVenta.reduce((acc, p) => acc + p.cantidad * p.precio_unitario, 0);
-  const fmt = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  const totalVenta = productosVenta.reduce(
+    (acc, p) => acc + p.cantidad * p.precio_unitario,
+    0
+  );
+
+  const fmt = (n: number) =>
+    n.toLocaleString(undefined, { minimumFractionDigits: 0 });
 
   return (
     <ScrollView
       style={[styles.container, { backgroundColor: colors.background }]}
       contentContainerStyle={{ padding: 16 }}
-      keyboardShouldPersistTaps="handled"
     >
-      <Text style={[styles.title, { color: colors.text }]}>Registrar venta</Text>
+      {/* Encabezado tipo dashboard */}
+      <View style={styles.headerContainer}>
+        <Ionicons name="cash-outline" size={28} color={colors.accentLight} />
+        <Text style={[styles.title, { color: colors.text }]}>
+          Registrar venta
+        </Text>
+      </View>
 
+      {/* Resumen actual */}
+      <View style={styles.summaryContainer}>
+        <View style={[styles.summaryCard, { backgroundColor: colors.card }]}>
+          <Ionicons name="cart-outline" size={22} color={colors.accentLight} />
+          <Text style={[styles.summaryLabel, { color: colors.muted }]}>
+            Productos
+          </Text>
+          <Text style={[styles.summaryValue, { color: colors.text }]}>
+            {productosVenta.length}
+          </Text>
+        </View>
+        <View style={[styles.summaryCard, { backgroundColor: colors.card }]}>
+          <Ionicons name="cash-outline" size={22} color={colors.accentLight} />
+          <Text style={[styles.summaryLabel, { color: colors.muted }]}>
+            Total
+          </Text>
+          <Text style={[styles.summaryValue, { color: colors.text }]}>
+            ${fmt(totalVenta)}
+          </Text>
+        </View>
+      </View>
+
+      {/* Tarjeta selección de producto */}
       <View style={[styles.card, { backgroundColor: colors.card }]}>
-        <Text style={[styles.label, { color: colors.muted }]}>Tipo de producto</Text>
-        <View style={[styles.pickerContainer, { borderColor: "#e6e9ef" }]}>
+        <Text style={[styles.label, { color: colors.muted }]}>
+          Tipo de producto
+        </Text>
+        <View style={[styles.pickerContainer, { borderColor: colors.border }]}>
           <Picker
             selectedValue={tipoProducto}
-            onValueChange={(value) => {
-              setTipoProducto(value as TipoProducto);
+            onValueChange={(v) => {
+              setTipoProducto(v as TipoProducto);
               setSelectedProducto(null);
               setCantidad("");
             }}
@@ -280,116 +264,170 @@ export default function RegisterSaleScreen() {
         {tipoProducto === "articulo" ? (
           <>
             <Text style={[styles.label, { color: colors.muted }]}>Producto</Text>
-            <View style={[styles.pickerContainer, { borderColor: "#e6e9ef" }]}>
+            <View style={[styles.pickerContainer, { borderColor: colors.border }]}>
               <Picker
-                selectedValue={selectedProducto?.tipo === "articulo" ? selectedProducto.id : undefined}
-                onValueChange={(itemValue) => {
-                  const producto = productos.find(p => p.id === itemValue);
-                  setSelectedProducto(producto ? { ...producto, tipo: "articulo" } : null);
+                selectedValue={
+                  selectedProducto?.tipo === "articulo"
+                    ? selectedProducto.id
+                    : undefined
+                }
+                onValueChange={(v) => {
+                  const p = productos.find((x) => x.id === v);
+                  setSelectedProducto(p ? { ...p, tipo: "articulo" } : null);
                 }}
               >
-                <Picker.Item label="Seleccione un producto..." value={undefined} />
-                {(productos || []).map((producto) => (
-                  <Picker.Item key={producto.id} label={`${producto.nombre} (Stock: ${producto.stock})`} value={producto.id} />
+                <Picker.Item
+                  label="Seleccione un producto..."
+                  value={undefined}
+                />
+                {productos.map((p) => (
+                  <Picker.Item
+                    key={p.id}
+                    label={`${p.nombre} (Stock: ${p.stock})`}
+                    value={p.id}
+                  />
                 ))}
               </Picker>
             </View>
-            {selectedProducto && selectedProducto.tipo === "articulo" && (
-              <View style={{ marginTop: 8 }}>
-                <Text style={{ color: colors.text }}>Precio: ${fmt(selectedProducto.precio)}</Text>
-                <Text style={{ color: colors.muted }}>Cantidad en stock: {selectedProducto.stock}</Text>
-              </View>
-            )}
           </>
         ) : (
           <>
-            <Text style={[styles.label, { color: colors.muted }]}>Personalizado</Text>
-            <View style={[styles.pickerContainer, { borderColor: "#e6e9ef" }]}>
+            <Text style={[styles.label, { color: colors.muted }]}>
+              Personalizado
+            </Text>
+            <View style={[styles.pickerContainer, { borderColor: colors.border }]}>
               <Picker
-                selectedValue={selectedProducto?.tipo === "personalizado" ? selectedProducto.id : undefined}
-                onValueChange={(itemValue) => {
-                  const producto = customProducts.find(p => p.id === itemValue);
-                  setSelectedProducto(producto ? { ...producto, tipo: "personalizado" } : null);
+                selectedValue={
+                  selectedProducto?.tipo === "personalizado"
+                    ? selectedProducto.id
+                    : undefined
+                }
+                onValueChange={(v) => {
+                  const p = customProducts.find((x) => x.id === v);
+                  setSelectedProducto(p ? { ...p, tipo: "personalizado" } : null);
                   setCantidad("1");
                 }}
               >
-                <Picker.Item label="Seleccione un personalizado..." value={undefined} />
-                {(customProducts || []).map((producto) => (
-                  <Picker.Item key={producto.id} label={`${producto.nombre} ($${fmt(producto.precio)})`} value={producto.id} />
+                <Picker.Item
+                  label="Seleccione un personalizado..."
+                  value={undefined}
+                />
+                {customProducts.map((p) => (
+                  <Picker.Item
+                    key={p.id}
+                    label={`${p.nombre} ($${fmt(p.precio)})`}
+                    value={p.id}
+                  />
                 ))}
               </Picker>
             </View>
-            {selectedProducto && selectedProducto.tipo === "personalizado" && (
-              <View style={{ marginTop: 8 }}>
-                <Text style={{ color: colors.text }}>Descripción: {selectedProducto.descripcion}</Text>
-                <Text style={{ color: colors.text }}>Medidas: {selectedProducto.medidas}</Text>
-                <Text style={{ color: colors.text }}>Precio: ${fmt(selectedProducto.precio)}</Text>
-              </View>
-            )}
           </>
         )}
 
         <TextInput
-          style={[styles.input, { borderColor: "#e6e9ef", backgroundColor: isDark ? "#0b1220" : "#fff" }]}
+          style={[
+            styles.input,
+            {
+              borderColor: colors.border,
+              backgroundColor:"#fff",
+              color: colors.text,
+            },
+          ]}
           placeholder="Cantidad"
-          placeholderTextColor={isDark ? "#9aa4b2" : "#9aa4b2"}
+          placeholderTextColor={colors.muted}
           value={cantidad}
           onChangeText={setCantidad}
           keyboardType="numeric"
-          editable={tipoProducto === "articulo" ? !!selectedProducto : !!selectedProducto}
         />
 
         <Pressable
-          style={({ pressed }) => [
-            styles.addButton,
-            { backgroundColor: puedeAgregar ? colors.accent : "#c4cdd6", opacity: pressed ? 0.9 : 1 }
+          style={[
+            styles.actionButton,
+            {
+              backgroundColor: puedeAgregar ? colors.accentLight : "#cbd5e1",
+            },
           ]}
           onPress={handleAgregarProducto}
           disabled={!puedeAgregar}
         >
-          <Text style={styles.addButtonText}>Agregar a la venta</Text>
+          <Ionicons name="add-circle-outline" size={20} color="#fff" />
+          <Text style={styles.actionButtonText}>Agregar producto</Text>
         </Pressable>
       </View>
 
+      {/* Lista de productos agregados */}
       <View style={[styles.card, { backgroundColor: colors.card }]}>
-        <Text style={[styles.subtitle, { color: colors.text }]}>Productos en la venta</Text>
+        <Text style={[styles.subtitle, { color: colors.text }]}>
+          Productos agregados
+        </Text>
 
         {productosVenta.length === 0 ? (
           <Text style={{ color: colors.muted }}>No hay productos agregados.</Text>
         ) : (
-          productosVenta.map((prod, idx) => (
-            <View key={idx} style={[styles.productoVentaItem, { backgroundColor: isDark ? "#071025" : "#fafafa" }]}>
-              <Text style={{ color: colors.text, fontWeight: "600" }}>
-                {prod.tipo === "articulo"
-                  ? `Artículo: ${productos.find(p => p.id === prod.articulo_id)?.nombre || "?"}`
-                  : `Personalizado: ${prod.nombre}`}
-              </Text>
-              <Text style={{ color: colors.muted }}>Cantidad: {prod.cantidad}</Text>
-              <Text style={{ color: colors.muted }}>Precio unitario: ${fmt(prod.precio_unitario)}</Text>
-              <Pressable style={styles.removeButton} onPress={() => handleEliminarProductoVenta(idx)}>
-                <Text style={{ color: colors.card }}>Eliminar</Text>
+          productosVenta.map((p, i) => (
+            <View
+              key={i}
+              style={[
+                styles.productoVentaItem,
+                { backgroundColor: "#f9fafb" },
+              ]}
+            >
+              <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                <Text style={{ color: colors.text, fontWeight: "600" }}>
+                  {p.tipo === "articulo"
+                    ? productos.find((x) => x.id === p.articulo_id)?.nombre
+                    : p.nombre}
+                </Text>
+                <Text style={{ color: colors.accentLight, fontWeight: "600" }}>
+                  ${fmt(p.precio_unitario * p.cantidad)}
+                </Text>
+              </View>
+              <Text style={{ color: colors.muted }}>Cantidad: {p.cantidad}</Text>
+
+              <Pressable
+                style={[styles.removeButton, { backgroundColor: colors.danger }]}
+                onPress={() => handleEliminarProductoVenta(i)}
+              >
+                <Ionicons name="trash-outline" size={16} color="#fff" />
+                <Text style={{ color: "#fff", marginLeft: 4, fontWeight: "600" }}>
+                  Eliminar
+                </Text>
               </Pressable>
             </View>
           ))
         )}
 
+        {/* Total y botón final */}
         <View style={styles.totalRow}>
-          <Text style={{ color: colors.muted }}>Total:</Text>
-          <Text style={{ color: colors.text, fontSize: 18, fontWeight: "700" }}>${fmt(totalVenta)}</Text>
+          <Text style={{ color: colors.muted, fontSize: 16 }}>Total:</Text>
+          <Text style={{ color: colors.text, fontWeight: "700", fontSize: 18 }}>
+            ${fmt(totalVenta)}
+          </Text>
         </View>
 
         {loading ? (
-          <ActivityIndicator size="large" color={colors.accent} style={{ marginTop: 8 }} />
+          <ActivityIndicator
+            size="large"
+            color={colors.accent}
+            style={{ marginTop: 12 }}
+          />
         ) : (
           <Pressable
-            style={({ pressed }) => [
-              styles.registerButton,
-              { backgroundColor: productosVenta.length === 0 ? "#c4cdd6" : colors.accent, opacity: pressed ? 0.95 : 1 }
+            style={[
+              styles.actionButton,
+              {
+                backgroundColor:
+                  productosVenta.length === 0 ? "#cbd5e1" : colors.accent,
+                marginTop: 12,
+              },
             ]}
             onPress={handleRegisterSale}
             disabled={productosVenta.length === 0 || loading}
           >
-            <Text style={styles.registerButtonText}>{loading ? "Registrando..." : "Registrar venta"}</Text>
+            <Ionicons name="save-outline" size={20} color="#fff" />
+            <Text style={styles.actionButtonText}>
+              {loading ? "Registrando..." : "Registrar venta"}
+            </Text>
           </Pressable>
         )}
       </View>
@@ -398,57 +436,151 @@ export default function RegisterSaleScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  title: { fontSize: 22, fontWeight: "700", marginBottom: 12 },
-  card: {
-    marginBottom: 14,
-    borderRadius: 12,
-    padding: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 6
+  container: {
+    flex: 1,
+    backgroundColor: "#f9f4ef", // tono cálido crema
+    padding: 16,
   },
-  label: { fontSize: 13, marginBottom: 6 },
-  pickerContainer: { borderColor: "gray", borderWidth: 1, borderRadius: 8, overflow: "hidden", marginBottom: 8 },
+
+  headerContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 10,
+  },
+
+  title: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: "#3a2e1f", // marrón oscuro tipo madera
+    textAlign: "center",
+    marginBottom: 16,
+  },
+
+  // 🧾 Resumen superior estilo dashboard
+  summaryContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 20,
+  },
+
+  summaryCard: {
+    flex: 1,
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 10,
+    marginHorizontal: 5,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#a07d4b", // tono dorado-marrón
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 5,
+    elevation: 3,
+  },
+
+  summaryLabel: {
+    color: "#fff",
+    fontSize: 13,
+  },
+
+  summaryValue: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+
+  // 🗂️ Tarjetas generales
+  card: {
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 20,
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+
+  label: {
+    fontSize: 14,
+    color: "#3a2e1f",
+    marginBottom: 6,
+  },
+
+  pickerContainer: {
+    borderColor: "#e9dcc3",
+    borderWidth: 1,
+    borderRadius: 10,
+    overflow: "hidden",
+    marginBottom: 10,
+    backgroundColor: "#fdfaf6",
+  },
+
   input: {
     height: 44,
-    borderColor: "gray",
     borderWidth: 1,
-    marginBottom: 12,
-    paddingHorizontal: 10,
-    borderRadius: 8
-  },
-  addButton: {
-    paddingVertical: 12,
+    borderColor: "#e9dcc3",
     borderRadius: 10,
-    alignItems: "center",
-    marginTop: 6
+    backgroundColor: "#fdfaf6",
+    paddingHorizontal: 10,
+    marginBottom: 12,
+    color: "#3a2e1f",
   },
-  addButtonText: { color: "#fff", fontWeight: "700" },
-  subtitle: { fontSize: 16, fontWeight: "700", marginBottom: 8 },
+
+  subtitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#3a2e1f",
+    marginBottom: 8,
+  },
+
   productoVentaItem: {
     borderWidth: 1,
-    borderColor: "#e6e9ef",
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 8
+    borderColor: "#e9dcc3",
+    borderRadius: 12,
+    padding: 12,
+    backgroundColor: "#fdfaf6",
+    marginBottom: 8,
   },
+
   removeButton: {
     marginTop: 8,
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: "#b91c1c",
-    paddingVertical: 8,
-    paddingHorizontal: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
     borderRadius: 8,
-    alignSelf: "flex-start"
+    alignSelf: "flex-start",
   },
-  totalRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 8 },
-  registerButton: {
-    marginTop: 12,
+
+  totalRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: "#e9dcc3",
+    paddingTop: 10,
+  },
+
+  actionButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
     borderRadius: 10,
     paddingVertical: 12,
-    alignItems: "center"
+    backgroundColor: "#a07d4b",
   },
-  registerButtonText: { color: "#fff", fontWeight: "700" }
+
+  actionButtonText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 15,
+  },
 });
+

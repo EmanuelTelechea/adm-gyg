@@ -1,7 +1,16 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, FlatList, StyleSheet, Button } from "react-native";
-import { useNavigation } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import {
+  View,
+  Text,
+  FlatList,
+  StyleSheet,
+  TouchableOpacity,
+  ActivityIndicator,
+} from "react-native";
+import { useNavigation } from "@react-navigation/native";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { LinearGradient } from "expo-linear-gradient";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 
 interface Articulo {
   id: number;
@@ -26,48 +35,33 @@ export default function ArticulosScreen() {
   const [articulos, setArticulos] = useState<Articulo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const navigation =
+    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   useEffect(() => {
-    // Usa la URL correcta para productos
     const apiUrl = "https://gyg-production.up.railway.app/api/articulos";
     fetch(apiUrl)
       .then(async (response) => {
-        // Si el proxy responde con texto plano, muestra advertencia
         const text = await response.text();
         try {
           const data = JSON.parse(text);
-          console.log("Respuesta de la API:", data);
           if (Array.isArray(data)) {
             setArticulos(data);
             setError(null);
           } else {
-            setArticulos([]);
-            setError("No se encontraron productos o la respuesta no es válida.");
+            setError("No se encontraron productos válidos.");
           }
         } catch (e) {
-          setArticulos([]);
-          if (text.startsWith("See")) {
-            setError("Debes habilitar el proxy CORS Anywhere en https://cors-anywhere.herokuapp.com/corsdemo antes de usarlo.");
-          } else {
-            setError("La respuesta de la API no es JSON válido.");
-          }
+          setError("La respuesta de la API no es JSON válido.");
         }
       })
-      .catch((error) => {
-        setArticulos([]);
-        if (error instanceof TypeError && error.message.includes("Failed to fetch")) {
-          setError("No se pudo conectar con el servidor. Es posible que la API no permita solicitudes desde el navegador web (CORS). Prueba en un dispositivo móvil o usa un proxy.");
-        } else {
-          setError("Error al cargar productos.");
-        }
-        console.error(error);
-      })
+      .catch(() =>
+        setError("Error al conectar con la API. Intenta nuevamente.")
+      )
       .finally(() => setLoading(false));
   }, []);
 
   const handleDelete = (id: number) => {
-    // Usa la URL correcta para productos
     fetch(`https://gyg-production.up.railway.app/api/articulos/${id}`, {
       method: "DELETE",
     })
@@ -78,78 +72,193 @@ export default function ArticulosScreen() {
   };
 
   const handleEdit = (item: Articulo) => {
-    navigation.navigate('EditProduct', { item });
+    navigation.navigate("EditProduct", { item });
   };
 
   const handleRegisterSale = (item: Articulo) => {
-    navigation.navigate('RegisterSale', { item });
+    navigation.navigate("RegisterSale", { item });
   };
 
   return (
-    <View style={styles.container}>
-      {loading ? (
-        <Text>Cargando productos...</Text>
-      ) : error ? (
-        <Text style={{ color: "red" }}>{error}</Text>
-      ) : (
-        <FlatList
-          ListHeaderComponent={
-            <>
-              <Text style={styles.title}>Página de Productos</Text>
-              <Button title="Agregar Producto" onPress={() => navigation.navigate('AddProduct')} color="#a07d4b"/>
-            </>
-          }
-          data={Array.isArray(articulos) ? articulos.filter(item => item.id !== undefined) : []}
-          keyExtractor={(item) => item.id.toString()}
-          renderItem={({ item }) => (
-            <View style={styles.item}>
-              <View style={styles.itemTextContainer}>
-                <Text>{item.nombre}</Text>
-                <Text>Precio: ${item.precio}</Text>
-                <Text>Cantidad en stock: {item.stock}</Text>
+    <LinearGradient colors={["#F3EAD9", "#E9DAC1"]} style={styles.background}>
+      <View style={styles.container}>
+        <Text style={styles.headerTitle}>Lista de Productos</Text>
+
+        <TouchableOpacity
+          style={styles.addButton}
+          onPress={() => navigation.navigate("AddProduct")}
+        >
+          <MaterialCommunityIcons name="plus" size={22} color="#fff" />
+          <Text style={styles.addButtonText}>Agregar Producto</Text>
+        </TouchableOpacity>
+
+        {loading ? (
+          <ActivityIndicator size="large" color="#8B5E3C" />
+        ) : error ? (
+          <Text style={styles.errorText}>{error}</Text>
+        ) : (
+          <FlatList
+            data={articulos.filter((a) => a.id !== undefined)}
+            keyExtractor={(item) => item.id.toString()}
+            renderItem={({ item }) => (
+              <View style={styles.card}>
+                <View style={styles.cardHeader}>
+                  <Text style={styles.productName}>{item.nombre}</Text>
+                  <Text style={styles.productCategory}>{item.categoria}</Text>
+                </View>
+                <View style={styles.cardBody}>
+                  <Text style={styles.price}>💲{item.precio}</Text>
+                  <Text style={styles.stock}>Stock: {item.stock}</Text>
+                </View>
+                <View style={styles.buttonRow}>
+                  <TouchableOpacity
+                    style={[styles.actionButton, styles.editButton]}
+                    onPress={() => handleEdit(item)}
+                  >
+                    <MaterialCommunityIcons
+                      name="pencil"
+                      size={20}
+                      color="#fff"
+                    />
+                    <Text style={styles.actionText}>Editar</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.actionButton, styles.deleteButton]}
+                    onPress={() => handleDelete(item.id)}
+                  >
+                    <MaterialCommunityIcons
+                      name="delete"
+                      size={20}
+                      color="#fff"
+                    />
+                    <Text style={styles.actionText}>Eliminar</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.actionButton, styles.saleButton]}
+                    onPress={() => handleRegisterSale(item)}
+                  >
+                    <MaterialCommunityIcons
+                      name="cart"
+                      size={20}
+                      color="#fff"
+                    />
+                    <Text style={styles.actionText}>Venta</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
-              <View style={styles.buttonContainer}>
-                <Button title="Editar" onPress={() => handleEdit(item)} color="#a07d4b" />
-                <Button title="Eliminar" onPress={() => handleDelete(item.id)} color="#a07d4b" />
-                <Button title="Registrar Venta" onPress={() => handleRegisterSale(item)} color="#a07d4b" />
-              </View>
-            </View>
-          )}
-          contentContainerStyle={styles.listContent}
-        />
-      )}
-    </View>
+            )}
+            contentContainerStyle={{ paddingBottom: 30 }}
+          />
+        )}
+      </View>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
+  background: {
+    flex: 1,
+  },
   container: {
     flex: 1,
     padding: 16,
-    backgroundColor: '#FFF',
+    marginBottom: 32,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
+  headerTitle: {
+    fontSize: 26,
+    fontWeight: "700",
+    color: "#3E2723",
+    textAlign: "center",
+    marginTop: 18,
+    marginBottom: 18,
+  },
+  addButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "center",
+    backgroundColor: "#8B5E3C",
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 12,
     marginBottom: 16,
+    elevation: 3,
   },
-  item: {
+  addButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+    marginLeft: 6,
+  },
+  card: {
+    backgroundColor: "#fff",
+    borderRadius: 14,
     padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#ccc',
-    flexDirection: 'column',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    marginBottom: 14,
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 3 },
+    shadowRadius: 5,
+    elevation: 3,
   },
-  itemTextContainer: {
-    marginBottom: 8,
+  cardHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
   },
-  buttonContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '100%',
+  productName: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#4E342E",
   },
-  listContent: {
-    paddingBottom: 16,
+  productCategory: {
+    fontSize: 13,
+    color: "#8D6E63",
+  },
+  cardBody: {
+    marginTop: 8,
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  price: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#6D4C41",
+  },
+  stock: {
+    fontSize: 14,
+    color: "#5D4037",
+  },
+  buttonRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 14,
+  },
+  actionButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    flex: 1,
+    marginHorizontal: 4,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  actionText: {
+    color: "#fff",
+    fontWeight: "600",
+    marginLeft: 5,
+    fontSize: 14,
+  },
+  editButton: {
+    backgroundColor: "#8B5E3C",
+  },
+  deleteButton: {
+    backgroundColor: "#C67B5C",
+  },
+  saleButton: {
+    backgroundColor: "#A47551",
+  },
+  errorText: {
+    textAlign: "center",
+    color: "red",
+    marginTop: 20,
   },
 });

@@ -1,8 +1,17 @@
-import { Image, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
+import React from "react";
+import {
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  View,
+  ImageBackground,
+} from "react-native";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { useNavigation } from "@react-navigation/native";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { LinearGradient } from "expo-linear-gradient";
+import { ThemedText } from "@/components/ThemedText";
+import { ThemedView } from "@/components/ThemedView";
 
 type RootStackParamList = {
   products: undefined;
@@ -10,77 +19,181 @@ type RootStackParamList = {
   AddProduct: undefined;
   RegisterSale: undefined;
   ReportsScreen: undefined;
-  CustomProducts: undefined; // <-- Agrega esta línea
+  CustomProducts: undefined;
 };
 
 export default function HomeScreen() {
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const navigation =
+    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+
+  const menuItems = [
+    {
+      title: "Productos",
+      icon: "hand-saw",
+      color: "#8D6E63",
+      navigateTo: "products",
+    },
+    {
+      title: "Categorías",
+      icon: "view-grid-outline",
+      color: "#A1887F",
+      navigateTo: "categories",
+    },
+    {
+      title: "Agregar Producto",
+      icon: "plus-box-outline",
+      color: "#6D4C41",
+      navigateTo: "AddProduct",
+    },
+    {
+      title: "Registrar Venta",
+      icon: "cart-outline",
+      color: "#C67B5C",
+      navigateTo: "RegisterSale",
+    },
+    {
+      title: "Reportes",
+      icon: "chart-line",
+      color: "#5D4037",
+      navigateTo: "ReportsScreen",
+    },
+    {
+      title: "Pedidos Personalizados",
+      icon: "pencil-ruler",
+      color: "#795548",
+      navigateTo: "CustomProducts",
+    },
+  ];
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Image
-        source={require('@/assets/images/back2.jpg')}
-        style={styles.reactLogo}
-      />
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Bienvenido a la app de gestión de G&G</ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.buttonContainer}>
-        <TouchableOpacity style={styles.button} onPress={() => navigation.navigate('products')}>
-          <ThemedText style={styles.buttonText}>Ver Productos</ThemedText>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.button} onPress={() => navigation.navigate('categories')}>
-          <ThemedText style={styles.buttonText}>Ver Categorías</ThemedText>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.button} onPress={() => navigation.navigate('AddProduct')}>
-          <ThemedText style={styles.buttonText}>Agregar Producto</ThemedText>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.button} onPress={() => navigation.navigate('RegisterSale')}>
-          <ThemedText style={styles.buttonText}>Vender Producto</ThemedText>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.button} onPress={() => navigation.navigate('ReportsScreen')}>
-          <ThemedText style={styles.buttonText}>Ver Reportes</ThemedText>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.button} onPress={() => navigation.navigate('CustomProducts')}>
-          <ThemedText style={styles.buttonText}>Ver Artículos Personalizados</ThemedText>
-        </TouchableOpacity>
-      </ThemedView>
-    </ScrollView>
+    <LinearGradient colors={["#F3EAD9", "#E9DAC1"]} style={styles.background}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContainer}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Encabezado */}
+        <ImageBackground
+          source={require("@/assets/images/wood-bg.jpg")}
+          style={styles.header}
+          imageStyle={{ borderRadius: 24 }}
+        >
+          <View style={styles.headerOverlay} />
+          <ThemedText type="title" style={styles.headerTitle}>
+            G&G 
+          </ThemedText>
+          <ThemedText style={styles.headerSubtitle}>
+            Artesanias en madera y más
+          </ThemedText>
+        </ImageBackground>
+
+        {/* Sección de botones */}
+        <ThemedView style={[styles.menuGrid, { backgroundColor: "transparent" }]}>
+          {menuItems.map((item, index) => (
+            <TouchableOpacity
+              key={index}
+              style={styles.card}
+              activeOpacity={0.9}
+              onPress={() => navigation.navigate(item.navigateTo as any)}
+            >
+              <LinearGradient
+                colors={["#FFFFFF", "#FDF8F3"]}
+                style={styles.cardInner}
+              >
+                <View
+                  style={[
+                    styles.iconBox,
+                    { backgroundColor: `${item.color}20` },
+                  ]}
+                >
+                  <MaterialCommunityIcons
+                    name={item.icon as any}
+                    size={36}
+                    color={item.color}
+                  />
+                </View>
+                <ThemedText style={styles.cardText}>{item.title}</ThemedText>
+              </LinearGradient>
+            </TouchableOpacity>
+          ))}
+        </ThemedView>
+      </ScrollView>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flexGrow: 1,
-    padding: 16,
-    alignItems: 'center',
+  background: {
+    flex: 1,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    marginBottom: 16,
+  scrollContainer: {
+    paddingHorizontal: 18,
+    paddingBottom: 40,
+    paddingTop: 25,
   },
-  titleContainer: {
-    marginBottom: 32,
+  header: {
+    width: "100%",
+    height: 190,
+    marginTop: 28,
+    marginBottom: 28,
+    justifyContent: "center",
+    alignItems: "center",
+    overflow: "hidden",
+    elevation: 3,
   },
-  buttonContainer: {
-    width: '100%',
-    alignItems: 'center',
+  headerOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(60, 35, 20, 0.5)",
+    borderRadius: 24,
   },
-  button: {
-    backgroundColor: '#a07d4b',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
-    marginBottom: 16,
-    width: '80%',
-    alignItems: 'center',
+  headerTitle: {
+    color: "#FFF",
+    fontSize: 42,
+    fontWeight: "700",
+    textAlign: "center",
+    letterSpacing: 0.8,
+    zIndex: 1,
   },
-  buttonText: {
-    color: '#fff',
+  headerSubtitle: {
+    color: "#FBEAD1",
     fontSize: 18,
-    fontWeight: 'bold',
+    marginTop: 6,
+    textAlign: "center",
+    zIndex: 1,
+  },
+  menuGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    rowGap: 18,
+  },
+  card: {
+    width: "48%",
+    borderRadius: 18,
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 6,
+    elevation: 3,
+    backgroundColor: "#fff",
+  },
+  cardInner: {
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 26,
+  },
+  iconBox: {
+    width: 64,
+    height: 64,
+    borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  cardText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#3E2723",
+    textAlign: "center",
   },
 });
-
-export { default as CustomProducts } from './CustomProducts';
