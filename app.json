@@ -36,6 +36,14 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "navbar": {
+        "bgColor": "#FFFFFF",
+        "accentColor": "#0f4c81",
+        "textColor": "#1f2937",
+        "height": 64
+      }
     }
   }
 }
