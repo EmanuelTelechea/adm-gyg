@@ -10,6 +10,7 @@ import {
   Alert,
   ActivityIndicator,
 } from "react-native";
+import { fetchJson } from "@/src/utils/fetchJson";
 
 interface CustomProduct {
   id: number;
@@ -30,12 +31,18 @@ export default function CustomProducts() {
   const [selectedProduct, setSelectedProduct] = useState<CustomProduct | null>(null);
 
   const fetchCustomProducts = () => {
-    setLoading(true);
-    fetch("https://gyg-production.up.railway.app/pedidos_personalizados")
-      .then((res) => res.json())
-      .then((data) => setCustomProducts(Array.isArray(data) ? data : []))
-      .catch(() => setCustomProducts([]))
-      .finally(() => setLoading(false));
+    (async () => {
+      setLoading(true);
+      try {
+        const data = await fetchJson("https://gyg-production.up.railway.app/pedidos_personalizados");
+        setCustomProducts(Array.isArray(data) ? data : []);
+      } catch (err: any) {
+        console.error("Error fetching personalizados:", err?.message ?? err);
+        setCustomProducts([]);
+      } finally {
+        setLoading(false);
+      }
+    })();
   };
 
   useEffect(() => {
@@ -47,23 +54,34 @@ export default function CustomProducts() {
       Alert.alert("Error", "Complete todos los campos correctamente.");
       return;
     }
-    setLoading(true);
-    fetch("https://gyg-production.up.railway.app/pedidos_personalizados", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nombre, descripcion, medidas, precio: Number(precio) }),
-    })
-      .then((res) => res.json())
-      .then(() => {
+    (async () => {
+      setLoading(true);
+      try {
+        const resp = await fetch("https://gyg-production.up.railway.app/pedidos_personalizados", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ nombre, descripcion, medidas, precio: Number(precio) }),
+        });
+        const text = await resp.text();
+        if (!resp.ok) {
+          let msg = text;
+          try { msg = JSON.parse(text)?.error ?? text; } catch {}
+          throw new Error(msg || "Error al crear personalizado");
+        }
+        // success
         setModalVisible(false);
         setNombre("");
         setDescripcion("");
         setMedidas("");
         setPrecio("");
         fetchCustomProducts();
-      })
-      .catch(() => Alert.alert("Error", "No se pudo crear el personalizado."))
-      .finally(() => setLoading(false));
+      } catch (err: any) {
+        console.error("Error creating personalizado:", err?.message ?? err);
+        Alert.alert("Error", err?.message ?? "No se pudo crear el personalizado.");
+      } finally {
+        setLoading(false);
+      }
+    })();
   };
 
   return (

@@ -14,6 +14,7 @@ import { Picker } from "@react-native-picker/picker";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { Ionicons } from "@expo/vector-icons";
+import { fetchJson, fetchJsonSafe } from "@/src/utils/fetchJson";
 
 interface Articulo {
   id: number;
@@ -55,16 +56,20 @@ type ProductoSeleccionado =
   | null;
 
 export default function RegisterSaleScreen() {
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === "dark";
   const colors = {
-  background: "#f9f4ef", // crema cálido
-  card: "#ffffff",
-  text: "#3a2e1f", // marrón oscuro madera
-  muted: "#8b7355",
-  accent: "#a07d4b", // dorado madera
-  accentLight: "#c19a6b",
-  danger: "#b91c1c",
-  border: "#e9dcc3",
-};
+    background: isDark ? "#0b1220" : "#fffaf0",
+    card: isDark ? "#0f1724" : "#fff",
+    text: isDark ? "#e6eef8" : "#3a2e1f",
+    muted: isDark ? "#9aa4b2" : "#b08a5a",
+    accent: "#0f4c81",
+    // color más claro del acento para iconos/énfasis
+    accentLight: isDark ? "#6fb8e6" : "#b08a5a",
+    // color de borde usado en inputs/selects
+    border: isDark ? "#22303a" : "#e9dcc3",
+    danger: "#b91c1c",
+  };
 
   const [productos, setProductos] = useState<Articulo[]>([]);
   const [customProducts, setCustomProducts] = useState<CustomProduct[]>([]);
@@ -78,26 +83,141 @@ export default function RegisterSaleScreen() {
   const route = useRoute();
   const { item } = (route.params as { item?: Articulo }) || {};
 
-  const fetchProductos = () => {
-    fetch("https://gyg-production.up.railway.app/api/articulos")
-      .then((r) => r.json())
-      .then((data) => {
-        const disponibles = Array.isArray(data)
-          ? data.filter((p) => p.stock > 0)
-          : [];
-        setProductos(disponibles);
-        if (item) setSelectedProducto({ ...item, tipo: "articulo" });
-      })
-      .catch(() => setProductos([]));
+  const fetchProductos = async () => {
+    try {
+      const data = await fetchJson(
+        "https://gyg-production.up.railway.app/api/articulos"
+      );
+      const disponibles = Array.isArray(data) ? data.filter((p) => p.stock > 0) : [];
+      setProductos(disponibles);
+      if (item) setSelectedProducto({ ...item, tipo: "articulo" });
+    } catch (err) {
+      console.error("Error fetching articulos:", (err as any)?.message ?? err);
+      setProductos([]);
+    }
 
-    fetch("https://gyg-production.up.railway.app/pedidos_personalizados/disponibles")
-      .then((r) => r.json())
-      .then((data) => setCustomProducts(Array.isArray(data) ? data : []))
-      .catch(() => setCustomProducts([]));
+    try {
+      // Intentar primero el endpoint "disponibles", si falla probar el endpoint general y normalizar.
+      const urlPreferida = "https://gyg-production.up.railway.app/personalizados/disponibles";
+      const urlFallback = "https://gyg-production.up.railway.app/pedidos_personalizados";
+
+      const safe = await fetchJsonSafe(urlPreferida);
+      let data: any = null;
+      let source: 'preferida' | 'fallbackArray' | 'candidate' | null = null;
+
+      if (safe.ok && Array.isArray(safe.data)) {
+        data = safe.data;
+        source = 'preferida';
+      } else {
+        // Intentar fallback
+        const safe2 = await fetchJsonSafe(urlFallback);
+        if (safe2.ok && Array.isArray(safe2.data)) {
+          data = safe2.data;
+          source = 'fallbackArray';
+        } else {
+          // Si alguno devolvió objeto que contiene el array en otra propiedad (p.ej. .data or .items), intentarlo
+          const candidate = safe.data ?? safe2.data;
+          if (candidate) {
+            if (Array.isArray(candidate)) {
+              data = candidate;
+              source = 'candidate';
+            }
+            else if (Array.isArray(candidate.items)) {
+              data = candidate.items;
+              source = 'candidate';
+            }
+            else if (Array.isArray(candidate.data)) {
+              data = candidate.data;
+              source = 'candidate';
+            }
+          }
+        }
+      }
+
+      // filtro estricto para fallback: incluir SOLO items que explícitamente indiquen disponibilidad
+      const strictAvailableFilter = (arr: any[]) => {
+        return arr.filter((it) => {
+          if (!it || typeof it !== "object") return false;
+          // si explícitamente marcado como disponible -> incluir
+          if ("disponible" in it) return Boolean((it as any).disponible);
+          // si explícitamente marcado como no vendido -> incluir
+          if ("vendido" in it) return !Boolean((it as any).vendido);
+          // stock explícito positivo -> incluir
+          if ("stock" in it && typeof (it as any).stock === "number") return (it as any).stock > 0;
+          // estado explícito que denote disponibilidad
+          if ("estado" in it) {
+            const s = String((it as any).estado || "").toLowerCase();
+            return ["disponible", "available", "activo", "pending", "pendiente"].includes(s);
+          }
+          if ("status" in it) {
+            const s = String((it as any).status || "").toLowerCase();
+            return ["available", "active", "pending"].includes(s);
+          }
+          // si está vinculado a una venta/pedido -> excluir
+          if ("venta_id" in it && (it as any).venta_id != null) return false;
+          if ("pedido_id" in it && (it as any).pedido_id != null) return false;
+          // campos que indican comprador/cliente -> excluir
+          const buyerFields = ["comprador", "cliente", "buyer"];
+          for (const f of buyerFields) {
+            if (f in it && (it as any)[f] != null) return false;
+          }
+          // no hay indicador explícito -> excluir en fallback (estricto)
+          return false;
+        });
+      };
+
+      // filtro leniente (mejor esfuerzo) para cuando strict deja vacío
+      const lenientAvailableFilter = (arr: any[]) => {
+        return arr.filter((it) => {
+          if (!it || typeof it !== "object") return false;
+          // excluir si explícitamente marcado como vendido o tiene venta_id/pedido_id o comprador
+          if ("vendido" in it && Boolean((it as any).vendido)) return false;
+          if ("venta_id" in it && (it as any).venta_id != null) return false;
+          if ("pedido_id" in it && (it as any).pedido_id != null) return false;
+          const buyerFields = ["comprador", "cliente", "buyer"];
+          for (const f of buyerFields) {
+            if (f in it && (it as any)[f] != null) return false;
+          }
+          // otherwise include (lenient)
+          return true;
+        });
+      };
+
+      if (!data) {
+        const msg = safe.data?.error ?? safe.text ?? `HTTP ${safe.status}`;
+        console.warn("No se pudieron obtener personalizados (tried varios endpoints):", msg);
+        setCustomProducts([]);
+      } else {
+        if (source === 'preferida') {
+          // endpoint /disponibles -> asumir correcto
+          setCustomProducts(Array.isArray(data) ? data : []);
+        } else {
+          const arr = Array.isArray(data) ? data : [];
+          const strict = strictAvailableFilter(arr);
+          if (strict.length > 0) {
+            setCustomProducts(strict);
+          } else {
+            const lenient = lenientAvailableFilter(arr);
+            if (lenient.length > 0) {
+              console.warn("Strict filter removed all items; using lenient filter for personalizados");
+              setCustomProducts(lenient);
+            } else {
+              console.warn("No personalizados pasaron strict/lenient filters; showing original array for inspection");
+              setCustomProducts(arr);
+            }
+          }
+        }
+      }
+    } catch (err) {
+      // Fallback: cualquier excepción imprevista
+      console.error("Error fetching personalizados (unexpected):", (err as any)?.message ?? err);
+      setCustomProducts([]);
+    }
   };
 
   useEffect(() => {
     fetchProductos();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item]);
 
   const cantidadVenta = parseInt(cantidad, 10) || 0;
@@ -175,28 +295,53 @@ export default function RegisterSaleScreen() {
 
   const handleRegisterSale = () => {
     if (productosVenta.length === 0) {
-      Alert.alert("Error", "Agregue al menos un producto.");
+      Alert.alert("Error", "Agregue al menos un producto a la venta.");
       return;
     }
     setLoading(true);
+    (async () => {
+      try {
+        const resp = await fetch("https://gyg-production.up.railway.app/ventas", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ articulos: productosVenta }),
+        });
+        const text = await resp.text().catch(() => "");
+        if (!resp.ok) {
+          let msg = text;
+          try {
+            msg = JSON.parse(text || "{}").error ?? JSON.stringify(JSON.parse(text || "{}"));
+          } catch {}
+          throw new Error(msg || "Error al registrar la venta");
+        }
 
-    fetch("https://gyg-production.up.railway.app/ventas", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ articulos: productosVenta }),
-    })
-      .then((r) => {
-        if (!r.ok) throw new Error("Error al registrar la venta");
-        return r.json();
-      })
-      .then(() => {
-        Alert.alert("Éxito", "Venta registrada correctamente.", [
-          { text: "OK", onPress: () => navigation.goBack() },
+        // parse success body if exists
+        try {
+          JSON.parse(text);
+        } catch {}
+
+        Alert.alert("Venta registrada", "La venta se registró correctamente.", [
+          {
+            text: "OK",
+            onPress: () => {
+              setProductosVenta([]);
+              setCantidad("");
+              setSelectedProducto(null);
+              fetchProductos();
+              Keyboard.dismiss();
+              try {
+                navigation.goBack?.();
+              } catch {}
+            },
+          },
         ]);
-        setProductosVenta([]);
-      })
-      .catch((err) => Alert.alert("Error", err.message))
-      .finally(() => setLoading(false));
+      } catch (err: any) {
+        console.error("Error registrando venta:", err?.message ?? err);
+        Alert.alert("Error", err?.message ?? "Error al registrar la venta.");
+      } finally {
+        setLoading(false);
+      }
+    })();
   };
 
   const totalVenta = productosVenta.reduce(
@@ -329,7 +474,7 @@ export default function RegisterSaleScreen() {
             styles.input,
             {
               borderColor: colors.border,
-              backgroundColor:"#fff",
+              backgroundColor: "#fff",
               color: colors.text,
             },
           ]}
@@ -344,7 +489,7 @@ export default function RegisterSaleScreen() {
           style={[
             styles.actionButton,
             {
-              backgroundColor: puedeAgregar ? colors.accentLight : "#cbd5e1",
+              backgroundColor: puedeAgregar ? colors.accentLight : "#ac7a3eff",
             },
           ]}
           onPress={handleAgregarProducto}
@@ -417,7 +562,7 @@ export default function RegisterSaleScreen() {
               styles.actionButton,
               {
                 backgroundColor:
-                  productosVenta.length === 0 ? "#cbd5e1" : colors.accent,
+                  productosVenta.length === 0 ? "#ac7a3eff" : colors.accent,
                 marginTop: 12,
               },
             ]}

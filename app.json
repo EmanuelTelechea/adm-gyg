@@ -4,6 +4,10 @@
     "slug": "adm-gyg",
     "version": "1.0.0",
     "orientation": "portrait",
+    "splash": {
+      "image": "assets/images/Diseño sin título.png",
+      "resizeMode": "contain"
+    },
     "icon": "./assets/images/icon.png",
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
@@ -13,14 +17,15 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "foregroundImage": "./assets/images/icon.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "package": "com.emanuel05.admgyg"
     },
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/icon.png"
     },
     "plugins": [
       "expo-router",
@@ -45,6 +50,10 @@
         "accentColor": "#0f4c81",
         "textColor": "#1f2937",
         "height": 64
+      },
+      "router": {},
+      "eas": {
+        "projectId": "9414c12f-8757-458c-8446-11d99c023824"
       }
     }
   }

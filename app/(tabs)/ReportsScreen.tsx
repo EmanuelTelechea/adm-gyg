@@ -11,6 +11,8 @@ import {
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { BarChart, PieChart } from "react-native-chart-kit";
 import { FontAwesome5, MaterialCommunityIcons, Feather } from "@expo/vector-icons";
+import * as Print from "expo-print";
+import * as Sharing from "expo-sharing";
 
 interface Venta {
   id: number;
@@ -133,6 +135,83 @@ export default function ReportsScreen() {
     },
   ];
 
+  const generatePDF = async () => {
+  try {
+    const html = `
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <style>
+          body { font-family: Arial; padding: 20px; }
+          h1 { text-align: center; color: #3a2e1f; }
+          h2 { color: #a07d4b; margin-top: 24px; }
+          .card { padding: 12px; margin-bottom: 12px; border: 1px solid #ddd; border-radius: 8px; }
+          .item { margin-left: 10px; font-size: 14px; }
+          .bold { font-weight: bold; }
+        </style>
+      </head>
+      <body>
+        <h1>Reporte de Ventas</h1>
+
+        <h2>Resumen General</h2>
+        <div class="card">
+          <p><span class="bold">Total Vendido:</span> $${totalVendido.toFixed(0)}</p>
+          <p><span class="bold">Cantidad de Ventas:</span> ${cantidadVentas}</p>
+          <p><span class="bold">Productos Vendidos:</span> ${productosVendidos}</p>
+          <p><span class="bold">Artículos Normales:</span> ${normales}</p>
+          <p><span class="bold">Personalizados:</span> ${personalizados}</p>
+          <p><span class="bold">Fecha inicio:</span> ${fechaInicio}</p>
+          <p><span class="bold">Fecha fin:</span> ${fechaFin}</p>
+        </div>
+
+        <h2>Productos más vendidos</h2>
+        <div class="card">
+          ${productosMasVendidos
+            .slice(0, 10)
+            .map(
+              (p) => `
+              <p class="item">• ${p.nombre} — ${p.cantidadVendida} unidades</p>
+              `
+            )
+            .join("")}
+        </div>
+
+        <h2>Detalles por Venta</h2>
+        ${detallesPorVenta
+          .map(
+            (item) => `
+          <div class="card">
+            <p><span class="bold">Venta #${item.venta.id}</span> — ${new Date(
+              item.venta.fecha
+            ).toLocaleDateString()}</p>
+            ${item.detalles
+              .map(
+                (d) => `
+              <p class="item">
+                ${d.esPersonalizado ? "Personalizado" : "Artículo"}: 
+                <span class="bold">${d.nombre}</span>
+                — Cant: ${d.cantidad}, Precio: $${d.precio_unitario}
+                <br />Subtotal: <span class="bold">$${d.subtotal}</span>
+              </p>
+            `
+              )
+              .join("")}
+            <p><span class="bold">Total Venta: $${item.totalVenta}</span></p>
+          </div>
+        `
+          )
+          .join("")}
+      </body>
+    </html>
+    `;
+
+    const { uri } = await Print.printToFileAsync({ html });
+
+    await Sharing.shareAsync(uri);
+  } catch (error) {
+    Alert.alert("Error", "Hubo un problema creando el PDF.");
+  }
+};
   const handleManualRefresh = () => setRefreshFlag((f) => f + 1);
 
   return (
@@ -165,6 +244,10 @@ export default function ReportsScreen() {
         </View>
       </View>
 
+      <TouchableOpacity style={styles.button} onPress={generatePDF}>
+        <Text style={styles.buttonText}>📄 Generar PDF</Text>
+      </TouchableOpacity>
+      
       {/* 📅 Filtros y actualización */}
       <View style={styles.card}>
         <TouchableOpacity style={styles.button} onPress={handleManualRefresh}>
